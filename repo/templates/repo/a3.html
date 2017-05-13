@@ -1,0 +1,35 @@
+{% extends 'repo/base.html' %}
+{% block content %}
+<div id="app">
+  <h1>Hello App!</h> 
+  <p>
+    <router-link to="/foo">Go to Foo</router-link>
+    <router-link to="/bar">Go to Bar</router-link>
+  </p>
+  <router-view></router-view>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const routes = [
+    { 
+      path: '/foo',
+      component: {
+        template: '<div>foo</div>'
+      }
+    },
+    {
+      path: '/bar',
+      component: {
+        template: '<div>bar</div>'
+      }
+    }
+  ]
+  const router = new VueRouter({
+    routes
+  })
+  const app = new Vue({
+    router
+  }).$mount('#app')
+</script>
+{% endblock %}
