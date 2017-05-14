@@ -10,7 +10,7 @@ class LoginSerializer(serializers.ModelSerializer):
 class RemoteHostSerializer(serializers.ModelSerializer):
     class Meta:
         model = RemoteHost
-        fields = ('id', 'ip', 'hostname', 'alias_name')
+        fields = ('id', 'ip', 'hostname', 'alias_name', 'supervisor_project')
 
 
 class JobMessageSerializer(serializers.ModelSerializer):

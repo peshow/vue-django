@@ -11,4 +11,5 @@ urlpatterns = [
     url(r'login/', include([
         url(r'get/$', LoginAPI.as_view(), name="login")
     ])),
+    url(r'supervisor/', AddSupervisor.as_view(), name="supervisor")
 ]

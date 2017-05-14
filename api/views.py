@@ -1,5 +1,6 @@
 import os
 from .func.code import Code
+from .func.AnsibleAddSupervisor import PlayRun
 from django.shortcuts import render
 from django.http import HttpResponse
 from rest_framework.views import APIView
@@ -47,3 +48,24 @@ class LoginAPI(APIView):
             return Response({"rest": "OK"})
         except Login.DoesNotExist:
             return Response({"rest": 0})
+
+
+class AddSupervisor(APIView):
+    def post(self, request, format=None):
+        playrun = PlayRun()
+        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user")
+        for host, supervisor_project in scan_result:
+            RemoteHost.objects.update_or_create(ip=host, supervisor_project=",".join(supervisor_project))
+
+        set_host = set(scan_result)
+        set_RemoteHost_host = {i['ip'] for i in RemoteHost.objects.values()}
+        diff = set_RemoteHost_host.difference(set_host)
+        assert diff
+        for ip in diff:
+            RemoteHost.objects.delete(ip)
+        return Response(scan_result)
+            
+    def get(self, request, format=None):
+        remote = list(RemoteHost.objects.values())
+        return Response(remote)
+        
