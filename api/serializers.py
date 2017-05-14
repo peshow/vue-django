@@ -7,10 +7,10 @@ class LoginSerializer(serializers.ModelSerializer):
         model = Login
         fields = ('id', 'username', 'password', 'create_time', 'last_login_time')
 
-class RemoteHostSerializer(serializers.ModelSerializer):
+class SupervisorHostSerializer(serializers.ModelSerializer):
     class Meta:
-        model = RemoteHost
-        fields = ('id', 'ip', 'hostname', 'alias_name', 'supervisor_project')
+        model = SupervisorHost
+        fields = ('id', 'name', 'ip', 'hostname', 'supervisor_project')
 
 
 class JobMessageSerializer(serializers.ModelSerializer):
@@ -18,8 +18,13 @@ class JobMessageSerializer(serializers.ModelSerializer):
         model = JobMessage
         field = ('id', 'job_id', 'message')
 
+class JobServializer(serializers.ModelSerializer):
+    class Meta:
+        model = Job
+        field = ('id', 'remote_id', 'jobname', 'command')
+
 
 class RemoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Remote
-        field = ('id', 'host_id', 'login', 'passwd', 'port')
+        field = ('id', 'name', 'ip', 'host', 'user', 'port', 'default_path', 'create_time')
