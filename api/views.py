@@ -13,10 +13,37 @@ from .models import *
 from .serializers import *
 
 class CheckRequestMixin:
-    def check_get(self, *args):
+    def check_params(self, *args):
         for item in args:
             if item is None:
                 return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+
+
+class SupervisorDBMixin:
+    db = SupervisorHost
+
+    def write_db(self, command, hosts="all_user"):
+        host_set = set()
+        playrun = PlayRun()
+        scan_result = playrun.run([("shell", command)], hosts=hosts)
+        for host, value in scan_result.items():
+            stdout = value.get('stdout') 
+            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
+                self.db.objects.filter(host=host).update(display="0")
+                self.db.objects.create(host=host, project=stdout, status="未启动服务")
+                continue
+            for item in stdout:
+                project, status = item
+                host_set.add(project)
+                get_object = self.db.objects.filter(host=host, project=project)
+                if get_object:
+                    get_object.update(host=host, project=project, status=status)
+                else:
+                    self.db.objects.create(host=host, project=project, status=status)
+            db_set = { db.project for db in self.db.objects.filter(host=host) }
+            diff = db_set.difference(host_set)
+            for diff_item in diff:
+                self.db.objects.filter(project=diff_item).update(display="0")
 
 # Create your views here.
 class JSONReponse(HttpResponse):
@@ -59,63 +86,42 @@ class LoginAPI(APIView):
             return Response({"rest": 0})
 
 
-class AddSupervisor(APIView):
-    db = SupervisorHost
-
-    def post(self, request, format=None):
+class AddSupervisor(SupervisorDBMixin, APIView):
+    def put(self, request, format=None):
         """
           POST: { scan: 0 }
         """
         post_data = json.loads(request.body.decode())
         if post_data.get("scan", None) != 0:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-#        host_set = set()
-#        playrun = PlayRun()
-#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user")
-#        for host, value in scan_result.items():
-#            stdout = value.get('stdout') 
-#            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
-#                self.db.objects.filter(host=host).update(display="0")
-#                self.db.objects.create(host=host, project=stdout, status="未启动服务")
-#                continue
-#            for item in stdout:
-#                project, status = item
-#                host_set.add(project)
-#                get_object = self.db.objects.filter(host=host, project=project)
-#                if get_object:
-#                    get_object.update(host=host, project=project, status=status)
-#                else:
-#                    self.db.objects.create(host=host, project=project, status=status)
-#            db_set = { db.project for db in self.db.objects.filter(host=host) }
-#            diff = db_set.difference(host_set)
-#            for diff_item in diff:
-#                self.db.objects.filter(project=diff_item).update(display="0")
+        command = """/bin/bash -lc 'supervisorctl status'"""
+        self.write_db(command)
         finally_result = list(self.db.objects.filter(display="1").values())
         return Response(finally_result)
 
-        # 取扫描结果与数据库内容的差集
-#        set_host = set(scan_result)
-#        set_SupervisorHost_host = {(dataElement['ip'], dataElement['project']) for dataElement in SupervisorHost.objects.values()}
-#        diff = set_SupervisorHost_host.difference(set_host)
-#        assert diff
-#        for ip in diff:
-#            SupervisorHost.objects.delete(ip)
-#        return Response(scan_result)
-            
+    def post(self, request, format=None):
+        post_data = json.loads(request.body.decode()) 
+        host = post_data.get("host", None)
+        project = post_data.get("project", None)
+        name = post_data.get("name", None)
+        describe = post_data.get("describe", None)
+        self.db.objects.filter(host=host, project=project).update(name=name, describe=describe)
+        finally_result = list(self.db.objects.filter(display="1").values())
+        return Response(finally_result)
+
+
     def get(self, request, format=None):
-        remote = list(RemoteHost.objects.values())
-        test = [{"ip": "172.16.20.120", "project": "sogou:sogou1", "message": "This is message", "status": "RUNNING"}]
-        print("fdsfasdf")
-        return Response(test)
+        finally_result = list(self.db.objects.filter(display="1").values())
+        return Response(finally_result)
         
 
-class ControlSupervisor(APIView):
-    def get(self, request, format=None):
-        ip = request.GET.get("ip", None)
+class ControlSupervisor(SupervisorDBMixin, APIView):
+    def post(self, request, format=None):
+        hosts = request.GET.get("host", None)
         action = request.GET.get("action", None)
         project = request.GET.get("project", None)
-        if ip is None or action is None or project is None:
+        if host is None or action is None or project is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-#        play = PLayRun()
-#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project))], hosts=ip)
+        command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
+        self.write_db(command, hosts)
         return Response({"rest": 0})
