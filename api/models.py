@@ -2,10 +2,11 @@ from django.db import models
 
 # Create your models here.
 class SupervisorHost(models.Model):
-    name = models.CharField(max_length=100, default="")
-    ip = models.CharField(max_length=45, blank=False)
-    hostname = models.CharField(max_length=45, default="")
-    supervisor_project = models.CharField(max_length=1000, default="")
+    ip = models.CharField(max_length=100, blank=False)
+    project = models.CharField(max_length=100, default="")
+    name = models.CharField(max_length=100, default="空")
+    status = models.CharField(max_length=45, default="")
+    describe = models.TextField(max_length=200, default="")
 
 
 class Remote(models.Model):

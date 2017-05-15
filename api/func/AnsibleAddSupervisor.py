@@ -1,3 +1,4 @@
+import re
 import json
 from collections import namedtuple
 from ansible.parsing.dataloader import DataLoader
@@ -8,7 +9,7 @@ from ansible.executor.task_queue_manager import TaskQueueManager
 from ansible.plugins.callback import CallbackBase
 
 
-class ResultCallback(CallbackBase):
+class SupervisorResultCallback(CallbackBase):
     def __init__(self, display=None):
         self.result_q = dict()
         super().__init__(display)
@@ -21,7 +22,12 @@ class ResultCallback(CallbackBase):
         self.result_q[host][key] = value
          
     def v2_runner_on_ok(self, res):
-        result = [ i.partition(" ")[0] for i in res._result.get("stdout_lines")]
+        pattern = re.compile(r'\s+')
+        mid_rest = result._result.get("stdout_lines")
+        if len(mid_rest) == 1 and mid_rest[0].startswith('unix:///'):
+            result = mid_rest[0]
+        else:
+            result = [ tuple(pattern.split(i)[0:2]) for i in mid_rest]
         self.gather_result(res, "stdout", result)
 
     def v2_runner_on_failed(self, res, ignore_errors=False):
@@ -49,7 +55,7 @@ class PlayRun:
                                     become_user=None,
                                     check=False)
 
-        self.results_callback = ResultCallback()
+        self.results_callback = SupervisorResultCallback()
         self.inventory = Inventory(loader=self.loader,
                                    variable_manager=self.variable_manager,
                                    host_list="/etc/ansible/hosts")
@@ -94,7 +100,7 @@ class PlayRun:
                 self.runner.cleanup()
             if self.loader:
                 self.loader.cleanup_all_tmp_files()
-            return self.results_callback.result_q
+            return self.results_callback.result_q   # run()最终将call_back的结果返回
 
 if __name__ == '__main__':
     playrun = PlayRun()
