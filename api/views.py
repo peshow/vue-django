@@ -52,32 +52,53 @@ class CodeChange(APIView):
         return Response({"rest": rest})
 
 
+class CheckLogin:
+    KEY = '!@2#3$%d6?2&19(*)*#f123zfnvsdfdsfd#@!95^%$<fs1'
+
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, cls):
+        def wrapper(request, format=None, *args, **kwargs):
+            token = request.COOKIES.get("X-User-Authorization", None)
+            try:
+                if token is None:
+                    return Response({"message": "Not Login", "logined": 0}, status.HTTP_401_UNAUTHORIZED)
+                else:
+                    decoded = jwt.decode(token.encode(), self.KEY, algorithm="HS512")
+                    username = decoded.get("username", None)
+                    Login.objects.get(username=username)
+            except Exception as e:
+                return Response({"message": "token is not exists", "logined": 0}, status.HTTP_401_UNAUTHORIZED)
+            rest = self.func(instance, request, format, *args, **kwargs)
+            return rest
+        return wrapper
+
+
 class LoginAPI(APIView):
     KEY = '!@2#3$%d6?2&19(*)*#f123zfnvsdfdsfd#@!95^%$<fs1'
 
+    @CheckLogin
     def get(self, request, format=None):
-        action = request.GET.get("action", None)
-        if action != "get":
-            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
-        token = request.COOKIES.get("X-User-Authorization", None)
-        print(request.COOKIES)
-        if token is None:
-            return Response({"message": "Not Login", "logined": 0})
-        try:
-            decoded = jwt.decode(token.encode(), self.KEY, algorithm="HS512")
-            username = decoded.get("username", None)
-            Login.objects.get(username=username)
-            return Response({"message": "Aleardy login", "logined": 1})
-        except Exception as e:
-            return Response({"message": e, "logined": 0})
+#        action = request.GET.get("action", None)
+#        if action != "get":
+#            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
+#        token = request.COOKIES.get("X-User-Authorization", None)
+#        if token is None:
+#            return Response({"message": "Not Login", "logined": 0})
+#        try:
+#            decoded = jwt.decode(token.encode(), self.KEY, algorithm="HS512")
+#            username = decoded.get("username", None)
+#            Login.objects.get(username=username)
+         return Response({"message": "Aleardy login", "logined": 1})
+#        except Exception as e:
+#            return Response({"message": e, "logined": 0})
 
+    @CheckLogin
     def delete(self, request, format=None):
         """
         注销,清除token
         """
-        action = request.GET.get("action", None)
-        if action != "del":
-            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
         try:
             response = Response({"message": "You're logout", "logined": 0, "logout": 1})
             response.delete_cookie("X-User-Authorization")
@@ -109,7 +130,7 @@ class LoginAPI(APIView):
             return Response({"login": "faile"})
 
 
-class AddSupervisor(APIView):
+class SupervisorAPI(APIView):
     db = SupervisorHost
 
     def __update_or_create(self, host, project="", status="", display="1", is_group="0"):
@@ -128,19 +149,18 @@ class AddSupervisor(APIView):
                              display=display,
                              is_group=is_group)
 
-    def put(self, request, format=None):
+    @CheckLogin
+    def post(self, request, format=None):
         """
-          POST: { scan: 0, is_group: 0}
+          POST: { is_group: 0 }
           is_group:int, 0为获取进程信息, 1为获取组信息
         """
         post_data = json.loads(request.body.decode())
         is_group = post_data.get("is_group", None)
-        if post_data.get("scan", None) != 0:
-            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         ans_shell = "shell"
         ans_command = """/bin/bash -lc 'supervisorctl status'"""
         hosts = "all_user"
-        playrun = PlayRun()
+        playrun = PlayRun(callback=SupervisorResultCallback)
         scan_result = playrun.run([(ans_shell, ans_command)], hosts=hosts)
         host_set = set()
         for host, value in scan_result.items():
@@ -167,18 +187,25 @@ class AddSupervisor(APIView):
         finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
         return Response(finally_result)
 
-    def post(self, request, format=None):
-        post_data = json.loads(request.body.decode()) 
-        host = post_data.get("host", None)
-        project = post_data.get("project", None)
-        name = post_data.get("name", None)
-        describe = post_data.get("describe", None)
-        is_group = post_data.get("is_group", None)
-        self.db.objects.filter(host=host, project=project).update(name=name, describe=describe)
-        finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
-        return Response(finally_result)
+    @CheckLogin
+    def put(self, request, format=None, rest_id=None):
+        """
+          response:
+            rest: 0为执行正常，1为执行异常
+        """
+        if rest_id:
+            post_data = json.loads(request.body.decode()) 
+            name = post_data.get("name", None)
+            describe = post_data.get("describe", None)
+            try:
+                self.db.objects.filter(pk=rest_id).update(name=name, describe=describe)
+                return Response({"rest": 0})
+            except Exception as e:
+                return Response({"message": e, "rest": 1}, status.HTTP_400_BAD_REQUEST )
+        else:
+            return Response({"message": "not specified object", 'rest': 1}, status.HTTP_400_BAD_REQUEST)
 
-
+    @CheckLogin
     def get(self, request, format=None):
         is_group = request.GET.get("is_group", None)
         if is_group is None:
@@ -187,19 +214,24 @@ class AddSupervisor(APIView):
         return Response(finally_result)
         
 
-class ControlSupervisor(APIView):
-    def post(self, request, format=None):
-        post_data = json.loads(request.body.decode())
-        hosts = post_data.get("host", None)
-        action = post_data.get("action", None)
-        project = post_data.get("project", None)
-        if hosts is None or action is None or project is None:
-            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-        ans_module = "shell"
-        ans_command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
-        playrun = PlayRun(callback=SupervisorResultCallback)
-        can_result = playrun.run([(ans_module, ans_command)], hosts=hosts)
-        return Response({"rest": 0})
+class SupervisorAction(APIView):
+    db = SupervisorHost
+
+    @CheckLogin
+    def patch(self, request, format=None, rest_id=None):
+        if rest_id:
+            post_data = json.loads(request.body.decode())
+            action = post_data.get("action", None)
+            if is_group is None:
+                return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+            project = self.db.objects.get(pk=rest_id).project
+            ans_module = "shell"
+            ans_command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
+            playrun = PlayRun(callback=SupervisorResultCallback)
+            can_result = playrun.run([(ans_module, ans_command)], hosts=hosts)
+            return Response({"rest": 0})
+        else:
+            return Response({"message": "not specified object", 'rest': 1}, status.HTTP_400_BAD_REQUEST)
 
 
 class CrontabAPI(APIView):
@@ -218,9 +250,38 @@ class CrontabAPI(APIView):
             db_ojbect.update(crontab=crontab)
         else:
             self.db.objects.create(cron_host=cron_host, cron_user=cron_user, crontab=crontab)
-            
 
-    def put(self, request, format=None):
+    @CheckLogin
+    def get(self, request, format=None, rest_id=None):
+        try:
+            if rest_id:
+                response = list(self.db.objects.filter(id=rest_id).values())
+            else:
+                response = list(self.db.objects.values())
+        except self.db.DoesNotExist:
+            return Response({"code": 1048, "message": "id not exists"}, status.HTTP_404_NOT_FOUND)
+        return Response(response, status.HTTP_200_OK)
+            
+    @CheckLogin
+    def put(self, request, format=None, rest_id=None):
+        """
+          response:
+            rest: 0为执行正常，1为执行异常
+        """
+        if rest_id:
+            post_data = json.loads(request.body.decode())
+            name = post_data.get("name", None)
+            describe = post_data.get("describe", None)
+            try:
+                self.db.objects.filter(pk=rest_id).update(name=name, describe=describe)
+                return Response({"rest": 0})
+            except Exception as e:
+                return Response({"message": e, "rest": 1}, status.HTTP_400_BAD_REQUEST )
+        else:
+            return Response({"message": "not specified object", 'rest': 1}, status.HTTP_400_BAD_REQUEST)
+
+    @CheckLogin
+    def post(self, request, format=None):
         ans_module = "script"
         ans_command = os.path.join(BASE_DIR, "shell/get_cron.sh")
         hosts = "all_user"
@@ -242,4 +303,14 @@ class CrontabAPI(APIView):
         for diff_item in diff:
             cron_host, cron_user, crontab = diff_item
             self.db.objects.filter(cron_host=cron_host, cron_user=cron_user, crontab=crontab).delete()
-        return Response({"rest": 0})
+        return Response({"rest": 0}, status.HTTP_201_CREATED)
+
+class CrontabAction(APIView):
+    @CheckLogin
+    def patch(self, request, format=None, rest_id=None):
+        if rest_id:
+            ans_module = 'shell'
+            ans_command = "pass"
+            playrun = PlayRun(callback=CronResultCallback)
+            can_result = playrun.run([(ans_module, ans_command)], hosts=hosts)
+    

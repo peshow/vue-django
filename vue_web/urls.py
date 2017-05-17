@@ -18,7 +18,5 @@ from django.contrib import admin
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
-    url(r'vue/', include("repo.urls")),
-    url(r'newapp/', include('newapp.urls')),
     url(r'api/', include('api.urls'))
 ]

@@ -31,8 +31,6 @@ ALLOWED_HOSTS = ["192.168.230.131", "127.0.0.1", '172.16.20.215', 'control.meihu
 # Application definition
 
 INSTALLED_APPS = [
-    'repo.apps.RepoConfig',
-    'newapp.apps.NewappConfig',
     'api.apps.ApiConfig',
     'rest_framework',
     'corsheaders',

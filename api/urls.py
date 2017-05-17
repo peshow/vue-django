@@ -12,11 +12,14 @@ urlpatterns = [
         url(r'^$', LoginAPI.as_view(), name="login")
     ])),
     url(r'supervisor/', include([
-        url(r'^$', AddSupervisor.as_view(), name="supervisor"),
-        url(r'^control/$', ControlSupervisor.as_view())
+        url(r'^$', SupervisorAPI.as_view(), name="supervisor"),
+        url(r'^(?P<rest_id>\d+)$', SupervisorAPI.as_view(), name="supervisor_not_params"),
+        url(r'^(?P<rest_id>\d+)/action/$', SupervisorAction.as_view())
     ])),
     url(r'crontab/', include([
-        url(r'^$', CrontabAPI.as_view(), name="crontab")
+        url(r'^$', CrontabAPI.as_view(), name="crontab_not_params"),
+        url(r'^(?P<rest_id>\d+)$', CrontabAPI.as_view(), name="crontab"),
+        url(r'^(?P<rest_id>\d+)$/action/$', CrontabAction.as_view(), name="crontab"),
     ]))
 #    url(r'supervisor/$', AddSupervisor.as_view(), name="supervisor"),
 #    url(r'supervisor/control/$', ControlSupervisor.as_view())

@@ -1,2 +1,0 @@
-webpackJsonp([1],{80:function(e,n,t){var r=t(27)(t(86),t(99),null,null);e.exports=r.exports},86:function(e,n,t){"use strict";Object.defineProperty(n,"__esModule",{value:!0}),n.default={data:function(){return{}}}},99:function(e,n){e.exports={render:function(){var e=this,n=e.$createElement;return(e._self._c||n)("div",[e._v("\n  这是 Vue-cli 编写的管理后台\n")])},staticRenderFns:[]}}});
-//# sourceMappingURL=1.d4184bb4ba94b7b73774.js.map
