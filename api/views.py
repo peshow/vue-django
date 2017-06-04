@@ -11,6 +11,12 @@ from rest_framework import status
 from .models import *
 from .serializers import *
 
+class CheckRequestMixin:
+    def check_get(self, *args):
+        for item in args:
+            if item is None:
+                return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+
 # Create your views here.
 class JSONReponse(HttpResponse):
     def __init__(self, data, **kwargs):
@@ -41,8 +47,10 @@ class CodeChange(APIView):
 
 class LoginAPI(APIView):
     def get(self, request, format=None):
-        username = request.GET.get("id")
-        password = request.GET.get("pass")
+        username = request.GET.get("id", None)
+        password = request.GET.get("pass", None)
+        if username is None or password is None:
+            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         try:
             Login.objects.get(username=username, password=password)
             return Response({"rest": "OK"})
@@ -67,5 +75,18 @@ class AddSupervisor(APIView):
             
     def get(self, request, format=None):
         remote = list(RemoteHost.objects.values())
-        return Response(remote)
+        test = [{"ip": "172.16.20.120", "project": "sogou:sogou1", "message": "This is message", "status": "RUNNING"}]
+        print("fdsfasdf")
+        return Response(test)
         
+
+class ControlSupervisor(APIView):
+    def get(self, request, format=None):
+        ip = request.GET.get("ip", None)
+        action = request.GET.get("action", None)
+        project = request.GET.get("project", None)
+        if ip is None or action is None or project is None:
+            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+#        play = PLayRun()
+#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project))], hosts=ip)
+        return Response({"rest": 0})
