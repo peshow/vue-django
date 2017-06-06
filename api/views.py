@@ -1,4 +1,5 @@
 import os
+import json
 from .func.code import Code
 from .func.AnsibleAddSupervisor import PlayRun
 from django.shortcuts import render
@@ -62,30 +63,34 @@ class AddSupervisor(APIView):
     db = SupervisorHost
 
     def post(self, request, format=None):
-        host_set = set()
-        playrun = PlayRun()
-        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user")
-#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="10.6.21.66")
-        for host, value in scan_result.items():
-            stdout = value.get('stdout') 
-            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
-                self.db.objects.filter(host=host).delete()
-                self.db.objects.create(host=host, project=stdout, status="未启动服务")
-                continue
-            for item in stdout:
-                print(item)
-                project, status = item
-                host_set.add(project)
-                get_object = self.db.objects.filter(host=host, project=project)
-                if get_object:
-                    get_object.update(host=host, project=project, status=status)
-                else:
-                    self.db.objects.create(host=host, project=project, status=status)
-            db_set = { db.project for db in self.db.objects.filter(host=host) }
-            diff = db_set.difference(host_set)
-            for diff_item in diff:
-                self.db.objects.filter(project=diff_item).delete()
-        finally_result = list(self.db.objects.values())
+        """
+          POST: { scan: 0 }
+        """
+        post_data = json.loads(request.body.decode())
+        if post_data.get("scan", None) != 0:
+            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+#        host_set = set()
+#        playrun = PlayRun()
+#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user")
+#        for host, value in scan_result.items():
+#            stdout = value.get('stdout') 
+#            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
+#                self.db.objects.filter(host=host).update(display="0")
+#                self.db.objects.create(host=host, project=stdout, status="未启动服务")
+#                continue
+#            for item in stdout:
+#                project, status = item
+#                host_set.add(project)
+#                get_object = self.db.objects.filter(host=host, project=project)
+#                if get_object:
+#                    get_object.update(host=host, project=project, status=status)
+#                else:
+#                    self.db.objects.create(host=host, project=project, status=status)
+#            db_set = { db.project for db in self.db.objects.filter(host=host) }
+#            diff = db_set.difference(host_set)
+#            for diff_item in diff:
+#                self.db.objects.filter(project=diff_item).update(display="0")
+        finally_result = list(self.db.objects.filter(display="1").values())
         return Response(finally_result)
 
         # 取扫描结果与数据库内容的差集

@@ -7,6 +7,9 @@ class SupervisorHost(models.Model):
     name = models.CharField(max_length=100, default="空")
     status = models.CharField(max_length=45, default="")
     describe = models.TextField(max_length=200, default="")
+    display = models.CharField(max_length=2,
+                                  choices=(("0", "undisplay"), ("1", 'display')),
+                                  default="1")
 
 
 class Remote(models.Model):
