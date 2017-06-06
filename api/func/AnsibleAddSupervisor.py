@@ -23,15 +23,15 @@ class SupervisorResultCallback(CallbackBase):
          
     def v2_runner_on_ok(self, res):
         pattern = re.compile(r'\s+')
-        mid_rest = result._result.get("stdout_lines")
+        mid_rest = res._result.get("stdout_lines")
         if len(mid_rest) == 1 and mid_rest[0].startswith('unix:///'):
             result = mid_rest[0]
         else:
             result = [ tuple(pattern.split(i)[0:2]) for i in mid_rest]
         self.gather_result(res, "stdout", result)
 
-    def v2_runner_on_failed(self, res, ignore_errors=False):
-        self.gather_result(res, 'stderr')
+#    def v2_runner_on_failed(self, res, ignore_errors=False):
+#        self.gather_result(res, 'stderr')
 
 
 class PlayRun:

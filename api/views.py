@@ -59,20 +59,43 @@ class LoginAPI(APIView):
 
 
 class AddSupervisor(APIView):
+    db = SupervisorHost
+
     def post(self, request, format=None):
+        host_set = set()
         playrun = PlayRun()
         scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user")
-        for host, supervisor_project in scan_result:
-            SupervisorHost.objects.update_or_create(ip=host, project=",".join(supervisor_project))
+#        scan_result = playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="10.6.21.66")
+        for host, value in scan_result.items():
+            stdout = value.get('stdout') 
+            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
+                self.db.objects.filter(host=host).delete()
+                self.db.objects.create(host=host, project=stdout, status="未启动服务")
+                continue
+            for item in stdout:
+                print(item)
+                project, status = item
+                host_set.add(project)
+                get_object = self.db.objects.filter(host=host, project=project)
+                if get_object:
+                    get_object.update(host=host, project=project, status=status)
+                else:
+                    self.db.objects.create(host=host, project=project, status=status)
+            db_set = { db.project for db in self.db.objects.filter(host=host) }
+            diff = db_set.difference(host_set)
+            for diff_item in diff:
+                self.db.objects.filter(project=diff_item).delete()
+        finally_result = list(self.db.objects.values())
+        return Response(finally_result)
 
         # 取扫描结果与数据库内容的差集
-        set_host = set(scan_result)
-        set_SupervisorHost_host = {(dataElement['ip'], dataElement['project']) for dataElement in SupervisorHost.objects.values()}
-        diff = set_SupervisorHost_host.difference(set_host)
-        assert diff
-        for ip in diff:
-            SupervisorHost.objects.delete(ip)
-        return Response(scan_result)
+#        set_host = set(scan_result)
+#        set_SupervisorHost_host = {(dataElement['ip'], dataElement['project']) for dataElement in SupervisorHost.objects.values()}
+#        diff = set_SupervisorHost_host.difference(set_host)
+#        assert diff
+#        for ip in diff:
+#            SupervisorHost.objects.delete(ip)
+#        return Response(scan_result)
             
     def get(self, request, format=None):
         remote = list(RemoteHost.objects.values())

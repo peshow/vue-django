@@ -23,9 +23,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = 'g&3s-qw-2tz)120jsd4zh^654(&caps$vbw=#m5$=pk+vydi#t'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ["192.168.230.131", "127.0.0.1", '172.16.20.215']
+ALLOWED_HOSTS = ["192.168.230.131", "127.0.0.1", '172.16.20.215', '10.6.8.200']
 
 
 # Application definition
@@ -130,7 +130,8 @@ STATICFILES_DIRS = [
 ]
 
 CORS_ORIGIN_WHITELIST = (
-    '127.0.0.1:8080',
+    '127.0.0.1',
     '172.16.20.215:8080',
-    '192.168.230.131:8080'
+    '192.168.230.131:8080',
+    '10.6.8.200'
 )

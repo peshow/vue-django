@@ -2,7 +2,7 @@ from django.db import models
 
 # Create your models here.
 class SupervisorHost(models.Model):
-    ip = models.CharField(max_length=100, blank=False)
+    host = models.CharField(max_length=100, blank=False)
     project = models.CharField(max_length=100, default="")
     name = models.CharField(max_length=100, default="空")
     status = models.CharField(max_length=45, default="")
