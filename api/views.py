@@ -26,6 +26,7 @@ class SupervisorDBMixin:
         host_set = set()
         playrun = PlayRun()
         scan_result = playrun.run([("shell", command)], hosts=hosts)
+        print(scan_result)
         for host, value in scan_result.items():
             stdout = value.get('stdout') 
             if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
@@ -37,11 +38,12 @@ class SupervisorDBMixin:
                 host_set.add(project)
                 get_object = self.db.objects.filter(host=host, project=project)
                 if get_object:
-                    get_object.update(host=host, project=project, status=status)
+                    get_object.update(host=host, project=project, status=status, display="1")
                 else:
-                    self.db.objects.create(host=host, project=project, status=status)
+                    self.db.objects.create(host=host, project=project, status=status, display="1")
             db_set = { db.project for db in self.db.objects.filter(host=host) }
             diff = db_set.difference(host_set)
+            print(diff, host_set, db_set)
             for diff_item in diff:
                 self.db.objects.filter(project=diff_item).update(display="0")
 
@@ -117,10 +119,12 @@ class AddSupervisor(SupervisorDBMixin, APIView):
 
 class ControlSupervisor(SupervisorDBMixin, APIView):
     def post(self, request, format=None):
-        hosts = request.GET.get("host", None)
-        action = request.GET.get("action", None)
-        project = request.GET.get("project", None)
-        if host is None or action is None or project is None:
+        post_data = json.loads(request.body.decode())
+        hosts = post_data.get("host", None)
+        action = post_data.get("action", None)
+        project = post_data.get("project", None)
+        print(hosts, action, project)
+        if hosts is None or action is None or project is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
         self.write_db(command, hosts)

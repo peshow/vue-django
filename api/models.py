@@ -11,6 +11,9 @@ class SupervisorHost(models.Model):
                                   choices=(("0", "undisplay"), ("1", 'display')),
                                   default="1")
 
+    class Meta:
+        unique_together = ('host', 'project')
+
 
 class Remote(models.Model):
     name = models.CharField(max_length=200, default="")
