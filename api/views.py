@@ -88,7 +88,9 @@ class LoginAPI(APIView):
             return Response({"rest": 0})
 
 
-class AddSupervisor(SupervisorDBMixin, APIView):
+class AddSupervisor(APIView):
+    db = SupervisorHost
+
     def put(self, request, format=None):
         """
           POST: { scan: 0 }
@@ -97,7 +99,28 @@ class AddSupervisor(SupervisorDBMixin, APIView):
         if post_data.get("scan", None) != 0:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         command = """/bin/bash -lc 'supervisorctl status'"""
-        self.write_db(command)
+        hosts = "all_user"
+        host_set = set()
+        playrun = PlayRun()
+        scan_result = playrun.run([("shell", command)], hosts=hosts)
+        for host, value in scan_result.items():
+            stdout = value.get('stdout')
+            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
+                self.db.objects.filter(host=host).update(display="0")
+                self.db.objects.create(host=host, project=stdout, status="未启动服务")
+                continue
+            for item in stdout:
+                project, status = item
+                host_set.add(project)
+                get_object = self.db.objects.filter(host=host, project=project)
+                if get_object:
+                    get_object.update(host=host, project=project, status=status)
+                else:
+                    self.db.objects.create(host=host, project=project, status=status)
+            db_set = { db.project for db in self.db.objects.filter(host=host) }
+            diff = db_set.difference(host_set)
+            for diff_item in diff:
+                self.db.objects.filter(project=diff_item).update(display="0")
         finally_result = list(self.db.objects.filter(display="1").values())
         return Response(finally_result)
 
@@ -127,5 +150,6 @@ class ControlSupervisor(SupervisorDBMixin, APIView):
         if hosts is None or action is None or project is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
-        self.write_db(command, hosts)
+        playrun = PlayRun()
+        can_result = playrun.run([("shell", command)], hosts=hosts)
         return Response({"rest": 0})
