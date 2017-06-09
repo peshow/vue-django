@@ -2,14 +2,19 @@ from django.db import models
 
 # Create your models here.
 class SupervisorHost(models.Model):
+    is_group =  models.CharField(max_length=2,
+                                  choices=(("0", "process"), ("1", "group")),
+                                  default="0",
+                                  db_index=True)
+    display = models.CharField(max_length=2,
+                                  choices=(("0", "undisplay"), ("1", 'display')),
+                                  default="1",
+                                  db_index=True)
     host = models.CharField(max_length=100, blank=False)
     project = models.CharField(max_length=100, default="")
     name = models.CharField(max_length=100, default="空")
     status = models.CharField(max_length=45, default="")
     describe = models.TextField(max_length=200, default="")
-    display = models.CharField(max_length=2,
-                                  choices=(("0", "undisplay"), ("1", 'display')),
-                                  default="1")
 
     class Meta:
         unique_together = ('host', 'project')

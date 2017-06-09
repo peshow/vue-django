@@ -1,5 +1,7 @@
 import os
+import jwt
 import json
+import datetime
 from .func.code import Code
 from .func.AnsibleAddSupervisor import PlayRun
 from django.shortcuts import render
@@ -17,36 +19,6 @@ class CheckRequestMixin:
         for item in args:
             if item is None:
                 return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-
-
-class SupervisorDBMixin:
-    db = SupervisorHost
-
-    def write_db(self, command, hosts="all_user"):
-        host_set = set()
-        playrun = PlayRun()
-        scan_result = playrun.run([("shell", command)], hosts=hosts)
-        print(scan_result)
-        for host, value in scan_result.items():
-            stdout = value.get('stdout') 
-            if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
-                self.db.objects.filter(host=host).update(display="0")
-                self.db.objects.create(host=host, project=stdout, status="未启动服务")
-                continue
-            for item in stdout:
-                project, status = item
-                host_set.add(project)
-                get_object = self.db.objects.filter(host=host, project=project)
-                if get_object:
-                    get_object.update(host=host, project=project, status=status, display="1")
-                else:
-                    self.db.objects.create(host=host, project=project, status=status, display="1")
-            db_set = { db.project for db in self.db.objects.filter(host=host) }
-            diff = db_set.difference(host_set)
-            print(diff, host_set, db_set)
-            for diff_item in diff:
-                self.db.objects.filter(project=diff_item).update(display="0")
-
 # Create your views here.
 class JSONReponse(HttpResponse):
     def __init__(self, data, **kwargs):
@@ -76,26 +48,82 @@ class CodeChange(APIView):
 
 
 class LoginAPI(APIView):
+    KEY = '!@2#3$%d6?2&19(*)*#f123zfnvsdfdsfd#@!95^%$<fs1'
+
     def get(self, request, format=None):
-        username = request.GET.get("id", None)
-        password = request.GET.get("pass", None)
+        action = request.GET.get("action", None)
+        if action != "get":
+            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
+        token = request.session.get("X-User-Authorization", None)
+        if token is None:
+            return Response({"message": "Not Login", "logined": 0})
+        try:
+            decoded = jwt.decode(token.encode(), self.KEY, algorithm="HS512")
+            username = decoded.get("username", None)
+            Login.objects.get(username=username)
+            return Response({"message": "Aleardy login", "logined": 1})
+        except Exception as e:
+            return Response({"message": e, "logined": 0})
+
+    def delete(self, request, format=None):
+        """
+        注销,清除token
+        """
+        action = request.GET.get("action", None)
+        if action != "del":
+            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
+        try:
+            del request.session["X-User-Authorization"]
+        except KeyError:
+            pass
+        return Response({"message": "You're logout", "logined": 0, "logout": 1})
+            
+    def post(self, request, format=None):
+        """
+          POST: {username: XXX, password: XXX}
+        """
+        post_data = json.loads(request.body.decode())
+        username = post_data.get("username", None)
+        password = post_data.get("password", None)
         if username is None or password is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         try:
             Login.objects.get(username=username, password=password)
-            return Response({"rest": "OK"})
+            exp = datetime.datetime.utcnow() + datetime.timedelta(days=7)
+            payload = {"username": username, "exp": exp}
+            token = jwt.encode(payload, self.KEY, algorithm="HS512").decode()
+            request.session["X-User-Authorization"] = token
+            return Response({"login": "success"})
         except Login.DoesNotExist:
-            return Response({"rest": 0})
+            return Response({"login": "faile"})
 
 
 class AddSupervisor(APIView):
     db = SupervisorHost
 
+    def __update_or_create(self, host, project="", status="", display="1", is_group="0"):
+        """
+          根据传入的host,project字段判断是否存在，
+          若存在,则执行额外参数的 update 操作
+          否则，执行 create 操作
+        """
+        db_object = self.db.objects.filter(host=host, project=project)
+        if db_object:
+            db_object.update(status=status, display=display, is_group=is_group)
+        else:
+            db_object.create(host=host,
+                             project=project,
+                             status=status,
+                             display=display,
+                             is_group=is_group)
+
     def put(self, request, format=None):
         """
-          POST: { scan: 0 }
+          POST: { scan: 0, is_group: 0}
+          is_group:int, 0为获取进程信息, 1为获取组信息
         """
         post_data = json.loads(request.body.decode())
+        is_group = post_data.get("is_group", None)
         if post_data.get("scan", None) != 0:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         command = """/bin/bash -lc 'supervisorctl status'"""
@@ -106,22 +134,25 @@ class AddSupervisor(APIView):
         for host, value in scan_result.items():
             stdout = value.get('stdout')
             if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
-                self.db.objects.filter(host=host).update(display="0")
-                self.db.objects.create(host=host, project=stdout, status="未启动服务")
+                self.__update_or_create(host=host, project=stdout, status="未启动服务")
                 continue
             for item in stdout:
                 project, status = item
-                host_set.add(project)
-                get_object = self.db.objects.filter(host=host, project=project)
-                if get_object:
-                    get_object.update(host=host, project=project, status=status)
-                else:
-                    self.db.objects.create(host=host, project=project, status=status)
-            db_set = { db.project for db in self.db.objects.filter(host=host) }
+                host_set.add((host, project))
+                self.__update_or_create(host=host, project=project, status=status)
+
+                cut_data = project.split(":")
+                if len(cut_data) == 2:
+                    group_mid, _ = cut_data
+                    group = group_mid + ':*'
+                    host_set.add((host, group))
+                    self.__update_or_create(host=host, project=group, is_group="1")
+            db_set = { (db.host, db.project) for db in self.db.objects.filter(host=host) }
             diff = db_set.difference(host_set)
             for diff_item in diff:
-                self.db.objects.filter(project=diff_item).update(display="0")
-        finally_result = list(self.db.objects.filter(display="1").values())
+                host, project = diff_item
+                self.db.objects.filter(host=host, project=project).update(display="0")
+        finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
         return Response(finally_result)
 
     def post(self, request, format=None):
@@ -130,23 +161,26 @@ class AddSupervisor(APIView):
         project = post_data.get("project", None)
         name = post_data.get("name", None)
         describe = post_data.get("describe", None)
+        is_group = post_data.get("is_group", None)
         self.db.objects.filter(host=host, project=project).update(name=name, describe=describe)
-        finally_result = list(self.db.objects.filter(display="1").values())
+        finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
         return Response(finally_result)
 
 
     def get(self, request, format=None):
-        finally_result = list(self.db.objects.filter(display="1").values())
+        is_group = request.GET.get("is_group", None)
+        if is_group is None:
+            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+        finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
         return Response(finally_result)
         
 
-class ControlSupervisor(SupervisorDBMixin, APIView):
+class ControlSupervisor(APIView):
     def post(self, request, format=None):
         post_data = json.loads(request.body.decode())
         hosts = post_data.get("host", None)
         action = post_data.get("action", None)
         project = post_data.get("project", None)
-        print(hosts, action, project)
         if hosts is None or action is None or project is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)

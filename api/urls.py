@@ -9,7 +9,7 @@ urlpatterns = [
         url(r'^get/$', Upload.as_view(), name="remote_upload")
     ])),
     url(r'login/', include([
-        url(r'^get/$', LoginAPI.as_view(), name="login")
+        url(r'^$', LoginAPI.as_view(), name="login")
     ])),
     url(r'supervisor/', include([
         url(r'^$', AddSupervisor.as_view(), name="supervisor"),
