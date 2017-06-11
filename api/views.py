@@ -3,7 +3,8 @@ import jwt
 import json
 import datetime
 from .func.code import Code
-from .func.AnsibleAddSupervisor import PlayRun
+from .func.AnsibleAd import PlayRun
+from .func.AnsibleCallBack import SupervisorResultCallback, CronResultCallback
 from django.shortcuts import render
 from django.http import HttpResponse
 from rest_framework.views import APIView
@@ -14,11 +15,15 @@ from rest_framework import status
 from .models import *
 from .serializers import *
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 class CheckRequestMixin:
     def check_params(self, *args):
         for item in args:
             if item is None:
                 return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+
 # Create your views here.
 class JSONReponse(HttpResponse):
     def __init__(self, data, **kwargs):
@@ -54,7 +59,8 @@ class LoginAPI(APIView):
         action = request.GET.get("action", None)
         if action != "get":
             return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
-        token = request.session.get("X-User-Authorization", None)
+        token = request.COOKIES.get("X-User-Authorization", None)
+        print(request.COOKIES)
         if token is None:
             return Response({"message": "Not Login", "logined": 0})
         try:
@@ -73,10 +79,12 @@ class LoginAPI(APIView):
         if action != "del":
             return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
         try:
-            del request.session["X-User-Authorization"]
+            response = Response({"message": "You're logout", "logined": 0, "logout": 1})
+            response.delete_cookie("X-User-Authorization")
+#            del request.session["X-User-Authorization"]
         except KeyError:
             pass
-        return Response({"message": "You're logout", "logined": 0, "logout": 1})
+        return response
             
     def post(self, request, format=None):
         """
@@ -92,8 +100,11 @@ class LoginAPI(APIView):
             exp = datetime.datetime.utcnow() + datetime.timedelta(days=7)
             payload = {"username": username, "exp": exp}
             token = jwt.encode(payload, self.KEY, algorithm="HS512").decode()
-            request.session["X-User-Authorization"] = token
-            return Response({"login": "success"})
+            #request.session["X-User-Authorization"] = token
+            expires = datetime.datetime.now() + datetime.timedelta(days=3)
+            response = Response({"login": "success"})
+            response.set_cookie('X-User-Authorization', token, httponly=True, expires=expires)
+            return response
         except Login.DoesNotExist:
             return Response({"login": "faile"})
 
@@ -126,11 +137,12 @@ class AddSupervisor(APIView):
         is_group = post_data.get("is_group", None)
         if post_data.get("scan", None) != 0:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-        command = """/bin/bash -lc 'supervisorctl status'"""
+        ans_shell = "shell"
+        ans_command = """/bin/bash -lc 'supervisorctl status'"""
         hosts = "all_user"
-        host_set = set()
         playrun = PlayRun()
-        scan_result = playrun.run([("shell", command)], hosts=hosts)
+        scan_result = playrun.run([(ans_shell, ans_command)], hosts=hosts)
+        host_set = set()
         for host, value in scan_result.items():
             stdout = value.get('stdout')
             if isinstance(stdout, str) and stdout.startswith(r'unix:///'):
@@ -183,7 +195,51 @@ class ControlSupervisor(APIView):
         project = post_data.get("project", None)
         if hosts is None or action is None or project is None:
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
-        command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
-        playrun = PlayRun()
-        can_result = playrun.run([("shell", command)], hosts=hosts)
+        ans_module = "shell"
+        ans_command = """/bin/bash -lc 'supervisorctl {action} {project}'""".format(action=action, project=project)
+        playrun = PlayRun(callback=SupervisorResultCallback)
+        can_result = playrun.run([(ans_module, ans_command)], hosts=hosts)
+        return Response({"rest": 0})
+
+
+class CrontabAPI(APIView):
+    db = CrontabHost
+
+    def __update_or_create(self, cron_host="", cron_user="", crontab="", cron_update=None):
+        if crontab.startswith(r"#"):
+            cron_update = crontab.strip("#")
+        else:
+            cron_update = "#" + crontab 
+        db_object = self.db.objects.filter(cron_host=cron_host, cron_user=cron_user, crontab=crontab)
+        db_object_update = self.db.objects.filter(cron_host=cron_host, cron_user=cron_user, crontab=cron_update)
+        if db_object:
+            db_object.update(crontab=crontab)
+        elif db_object_update:
+            db_ojbect.update(crontab=crontab)
+        else:
+            self.db.objects.create(cron_host=cron_host, cron_user=cron_user, crontab=crontab)
+            
+
+    def put(self, request, format=None):
+        ans_module = "script"
+        ans_command = os.path.join(BASE_DIR, "shell/get_cron.sh")
+        hosts = "all_user"
+        playrun = PlayRun(callback=CronResultCallback)
+        can_result = playrun.run([(ans_module, ans_command)], hosts=hosts)
+        host_set = set()
+        for cron_host, values in can_result.items():
+            for stdout in values.get("stdout"):
+                cron_user, cron_list = stdout
+                for crontab in cron_list:
+                    host_set.add((cron_host, cron_user, crontab))
+                    self.__update_or_create(cron_host=cron_host,
+                                            cron_user=cron_user,
+                                            crontab = crontab)
+        db_set = set((db["cron_host"],
+                      db["cron_user"],
+                      db["crontab"]) for db in self.db.objects.values())
+        diff = db_set.difference(host_set)
+        for diff_item in diff:
+            cron_host, cron_user, crontab = diff_item
+            self.db.objects.filter(cron_host=cron_host, cron_user=cron_user, crontab=crontab).delete()
         return Response({"rest": 0})

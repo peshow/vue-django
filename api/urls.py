@@ -14,6 +14,9 @@ urlpatterns = [
     url(r'supervisor/', include([
         url(r'^$', AddSupervisor.as_view(), name="supervisor"),
         url(r'^control/$', ControlSupervisor.as_view())
+    ])),
+    url(r'crontab/', include([
+        url(r'^$', CrontabAPI.as_view(), name="crontab")
     ]))
 #    url(r'supervisor/$', AddSupervisor.as_view(), name="supervisor"),
 #    url(r'supervisor/control/$', ControlSupervisor.as_view())

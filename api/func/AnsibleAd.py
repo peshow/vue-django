@@ -1,37 +1,11 @@
-import re
 import json
+#from AnsibleCallBack import *
 from collections import namedtuple
 from ansible.parsing.dataloader import DataLoader
 from ansible.vars import VariableManager
 from ansible.inventory import Inventory
 from ansible.playbook.play import Play
 from ansible.executor.task_queue_manager import TaskQueueManager
-from ansible.plugins.callback import CallbackBase
-
-
-class SupervisorResultCallback(CallbackBase):
-    def __init__(self, display=None):
-        self.result_q = dict()
-        super().__init__(display)
-
-    def gather_result(self, res, key, value=None):
-        host = res._host.name
-        if value is None:
-            value = res._result.get(key)
-        self.result_q[host] = {}
-        self.result_q[host][key] = value
-         
-    def v2_runner_on_ok(self, res):
-        pattern = re.compile(r'\s+')
-        mid_rest = res._result.get("stdout_lines")
-        if len(mid_rest) == 1 and mid_rest[0].startswith('unix:///'):
-            result = mid_rest[0]
-        else:
-            result = [ tuple(pattern.split(i)[0:2]) for i in mid_rest]
-        self.gather_result(res, "stdout", result)
-
-#    def v2_runner_on_failed(self, res, ignore_errors=False):
-#        self.gather_result(res, 'stderr')
 
 
 class PlayRun:
@@ -39,7 +13,7 @@ class PlayRun:
         'connection', 'module_path', 'forks', 'become', 'become_method',
         'become_user', 'check'])
 
-    def __init__(self, connection_type="ssh", forks=100, host_list="/etc/ansible/hosts", passwords=None):
+    def __init__(self, connection_type="ssh", forks=100, host_list="/etc/ansible/hosts", passwords=None, callback=None):
         self.connection_type = connection_type
         self.forks = forks
         self.host_list = host_list
@@ -55,7 +29,7 @@ class PlayRun:
                                     become_user=None,
                                     check=False)
 
-        self.results_callback = SupervisorResultCallback()
+        self.results_callback = callback()
         self.inventory = Inventory(loader=self.loader,
                                    variable_manager=self.variable_manager,
                                    host_list="/etc/ansible/hosts")
@@ -103,5 +77,5 @@ class PlayRun:
             return self.results_callback.result_q   # run()最终将call_back的结果返回
 
 if __name__ == '__main__':
-    playrun = PlayRun()
-    print(playrun.run([("shell", """/bin/bash -lc 'supervisorctl status'""")], hosts="all_user"))
+    playrun = PlayRun(callback=CronResultCallback)
+    print(playrun.run([("script", """../shell/get_cron.py""")], hosts="all_user"))

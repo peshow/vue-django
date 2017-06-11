@@ -20,6 +20,14 @@ class SupervisorHost(models.Model):
         unique_together = ('host', 'project')
 
 
+class CrontabHost(models.Model):
+    cron_host = models.CharField(max_length=100, blank=False)
+    cron_user = models.CharField(max_length=100, blank="")
+    crontab = models.CharField(max_length=200, default="")
+    name = models.CharField(max_length=100, default="空")
+    describe = models.TextField(max_length=200, default="")
+
+
 class Remote(models.Model):
     name = models.CharField(max_length=200, default="")
     ip = models.CharField(max_length=100, default="")
