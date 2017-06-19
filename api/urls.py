@@ -13,6 +13,7 @@ urlpatterns = [
     ])),
     url(r'supervisor/', include([
         url(r'^$', SupervisorAPI.as_view(), name="supervisor"),
+        url(r'^search/$', SupervisorSearch.as_view(), name="supervisor_search"),
         url(r'^(?P<rest_id>\d+)$', SupervisorAPI.as_view(), name="supervisor_not_params"),
         url(r'^(?P<rest_id>\d+)/action/$', SupervisorAction.as_view())
     ])),

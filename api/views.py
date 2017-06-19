@@ -80,19 +80,7 @@ class LoginAPI(APIView):
 
     @CheckLogin
     def get(self, request, format=None):
-#        action = request.GET.get("action", None)
-#        if action != "get":
-#            return Response("FORBIDDEN", status.HTTP_403_FORBIDDEN)
-#        token = request.COOKIES.get("X-User-Authorization", None)
-#        if token is None:
-#            return Response({"message": "Not Login", "logined": 0})
-#        try:
-#            decoded = jwt.decode(token.encode(), self.KEY, algorithm="HS512")
-#            username = decoded.get("username", None)
-#            Login.objects.get(username=username)
-         return Response({"message": "Aleardy login", "logined": 1})
-#        except Exception as e:
-#            return Response({"message": e, "logined": 0})
+        return Response({"message": "Aleardy login", "logined": 1})
 
     @CheckLogin
     def delete(self, request, format=None):
@@ -212,6 +200,27 @@ class SupervisorAPI(APIView):
             return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
         finally_result = list(self.db.objects.filter(is_group=is_group, display="1").values())
         return Response(finally_result)
+
+
+class SupervisorSearch(APIView):
+    db = SupervisorHost
+
+    @CheckLogin
+    def get(self, request, format=None):
+        q = request.GET.get("q", None)
+        is_group = request.GET.get("is_group", None)
+        if not is_group or not q:
+            return Response("Bad request!", status=status.HTTP_400_BAD_REQUEST)
+        if q == "count":
+            count = self.db.objects.only("id").filter(is_group=is_group, display="1").count()
+            return Response({"rest": count})
+        elif q == "filter":
+            page = int(request.GET.get("page", 1))
+            _range = int(request.GET.get("range", 10))
+            start = (page - 1) * _range
+            stop = page * _range + 1
+            finally_result = list(self.db.objects.filter(is_group=is_group, display="1")[start:stop].values())
+            return Response(finally_result)
         
 
 class SupervisorAction(APIView):
